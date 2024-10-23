@@ -1,17 +1,31 @@
-#include <llvm/IR/DerivedTypes.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/GenericValue.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <llvm/Support/TargetSelect.h>
 
+#include "../App/sim.h"
+
 using namespace llvm;
 
-void foo(LLVMContext &Ctx, Module &M) {
+auto main() -> int {
+    //------------INITIALIZE------------
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    LLVMContext Ctx;
+    Module *m = new Module("app", Ctx);
     IRBuilder builder(Ctx);
+
+
     auto *type_0x0000555D9CB0A068 = Type::getIntNTy(Ctx, 32);
     auto *ret_type_0 = type_0x0000555D9CB0A068;
     std::vector<Type *> args_0;
     auto *func_type_0 = FunctionType::get(ret_type_0, args_0, false);
-    auto *func_0 = Function::Create(func_type_0, Function::ExternalLinkage, "simRand", M);
+    auto *func_0 = Function::Create(func_type_0, Function::ExternalLinkage, "simRand", m);
     auto *type_0x0000555D9CB09EE8 = Type::getVoidTy(Ctx);
     auto *ret_type_1 = type_0x0000555D9CB09EE8;
     std::vector<Type *> args_1;
@@ -19,15 +33,15 @@ void foo(LLVMContext &Ctx, Module &M) {
     args_1.push_back(type_0x0000555D9CB0A068);
     args_1.push_back(type_0x0000555D9CB0A068);
     auto *func_type_1 = FunctionType::get(ret_type_1, args_1, false);
-    auto *func_1 = Function::Create(func_type_1, Function::ExternalLinkage, "simPutPixel", M);
+    auto *func_1 = Function::Create(func_type_1, Function::ExternalLinkage, "simPutPixel", m);
     auto *ret_type_2 = type_0x0000555D9CB09EE8;
     std::vector<Type *> args_2;
     auto *func_type_2 = FunctionType::get(ret_type_2, args_2, false);
-    auto *func_2 = Function::Create(func_type_2, Function::ExternalLinkage, "simFlush", M);
+    auto *func_2 = Function::Create(func_type_2, Function::ExternalLinkage, "simFlush", m);
     auto *ret_type_3 = type_0x0000555D9CB09EE8;
     std::vector<Type *> args_3;
     auto *func_type_3 = FunctionType::get(ret_type_3, args_3, false);
-    auto *func_3 = Function::Create(func_type_3, Function::ExternalLinkage, "app", M);
+    auto *func_3 = Function::Create(func_type_3, Function::ExternalLinkage, "app", m);
     auto *bb_4 = BasicBlock::Create(Ctx, "", func_3);
     auto *bb_5 = BasicBlock::Create(Ctx, "", func_3);
     auto *bb_6 = BasicBlock::Create(Ctx, "", func_3);
@@ -861,13 +875,25 @@ void foo(LLVMContext &Ctx, Module &M) {
     phi_17->addIncoming(op_0_17, bb_4);
     auto *op_1_17 = instr_85;
     phi_17->addIncoming(op_1_17, bb_11);
-}
 
-auto main() -> int {
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
-    LLVMContext ctx;
-    Module m("app", ctx);
-    foo(ctx, m);
-    m.dump();
+    //------------INTERPRETATION------------
+    ExecutionEngine *EE = EngineBuilder(std::unique_ptr<Module>(m)).create();
+    EE->InstallLazyFunctionCreator([&](const std::string &FuncName) -> void * {
+      if (FuncName == "simFlush") {
+        return reinterpret_cast<void *>(simFlush);
+      }
+      if (FuncName == "simPutPixel") {
+        return reinterpret_cast<void *>(simPutPixel);
+      }
+      return nullptr;
+    });
+    EE->finalizeObject();
+  
+    simInit();
+  
+    ArrayRef<GenericValue> NoArgs;
+    EE->runFunction(func_3, NoArgs);
+  
+    simExit();
+    return EXIT_SUCCESS;
 }
